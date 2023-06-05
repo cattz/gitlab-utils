@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+
+# Validate your GitLab pipeline file
+
+import os
+import sys
+import json
+from urllib import request
+from argparse import ArgumentParser
+
+try:
+    TOKEN = os.environ['GITLAB_TOKEN']
+except KeyError:
+    print('[ERROR] Export your GitLab token in the environmnet variable GITLAB_TOKEN')
+    exit(-1)
+
+GITLAB = os.environ.get('GITLAB_API', 'https://gitlab.com/api/v4')
+headers = {
+    'PRIVATE-TOKEN': TOKEN,
+    'Content-Type': 'application/json'
+}
+
+HELP = '''
+Validate a GitLab pipeline definition via GitLab API
+'''
+
+
+def get_arguments():
+    parser = ArgumentParser(description=HELP)
+    parser.add_argument('-f', '--pipeline-file', required=False,
+                        help='Pipeline definition file')
+    parser.add_argument('-p', '--gitlab-project', required=False,
+                        help='ID of the GitLab project for validation in the project context')
+    parser.add_argument('-m', '--display-merged-yaml', required=False, action='store_true',
+                        help='Print the merged yaml result of the included templates')
+    parser.set_defaults(
+        pipeline_file='.gitlab-ci.yml',
+        gitlab_project=None,
+        display_merged_yaml=False
+    )
+
+    return parser.parse_args()
+
+
+def post_data(url, data, headers):
+    """
+    POST `data` string to `url`, return response body
+    """
+    bindata = data if type(data) == bytes else data.encode('utf-8')
+    req = request.Request(url, bindata, headers)
+    resp = request.urlopen(req)
+    if resp.code == 200:
+        return resp.read()
+    print(f'Error: {resp}')
+    sys.exit(-1)
+
+
+def error(e):
+    print(e, file=sys.stderr)
+
+
+def lint_success(d):
+    # Have to do this due to the inconsistent reply from GitLab API
+    if 'status' in d:
+        return d['status'] == 'valid'
+    return d['valid']
+
+
+def validate_pipeline(pipeline_file, gitlab_project, display_merged_yaml=False):
+    with open(pipeline_file, 'r') as fl:
+        pipeline_json = json.dumps({'content': fl.read(), 'dry_run': 'true'})
+    if gitlab_project:
+        url = f'{GITLAB}/projects/{gitlab_project}/ci/lint'
+    else:
+        url = f'{GITLAB}/ci/lint'
+    r = post_data(url, pipeline_json, headers=headers)
+    data = json.loads(r)
+    if display_merged_yaml and 'merged_yaml' in data:
+        print(data['merged_yaml'])
+
+    if not lint_success(data):
+        print(f'[ERROR] Pipeline lint for {pipeline_file} has errors')
+        if data['errors']:
+            for e in data['errors']:
+                error(f' * {e}')
+        if data['warnings']:
+            error('WARNINGS:')
+            for e in data['warnings']:
+                error(f' * {e}')
+        sys.exit(-1)
+    print(f'[OK] Pipeline lint for {pipeline_file} passed')
+    sys.exit(0)  # valid
+
+
+if __name__ == '__main__':
+    args = get_arguments()
+    validate_pipeline(args.pipeline_file, args.gitlab_project, args.display_merged_yaml)
+

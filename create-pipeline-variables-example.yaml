@@ -1,0 +1,34 @@
+---
+star:  # All environments or '*'
+  FOO:
+    value: somevalue
+    protected: false
+    masked: true
+  BAR:
+    value: anothervalue
+    # protected: false default is false
+    # masked: true default is true
+
+dev:
+  API_TOKEN:
+    value: 234411jkhg23jh
+    # protected: false
+    # masked: true
+
+tst:
+  API_TOKEN:
+    value: akdhsl453gjwq8
+    # protected: false
+    # masked: true
+
+acc:
+  API_TOKEN:
+    value: ewrk453jhs284j
+    protected: true
+    # masked: true
+
+prd:
+  API_TOKEN:
+    value: sdhnsnhf6545dg939h
+    protected: true
+    # masked: true
